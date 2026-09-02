@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>Codex Kanban</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-bar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">K</div>
+          <div>
+            <h1>Codex Kanban</h1>
+            <p id="boardSummary">Loading your tasks…</p>
+          </div>
+        </div>
+        <div class="app-actions">
+          <div class="connection" id="connectionStatus" data-state="loading">
+            <span class="connection-dot" aria-hidden="true"></span>
+            <span id="connectionLabel">Connecting</span>
+          </div>
+          <button class="icon-button" id="refreshButton" type="button" aria-label="Refresh tasks" title="Refresh tasks">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18">
+              <path d="M20 11a8 8 0 1 0-2.35 5.65M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <button class="primary-button" id="newChatButton" type="button">
+            <span aria-hidden="true">＋</span>
+            New chat
+          </button>
+        </div>
+      </header>
+
+      <main class="board" id="board" aria-label="Codex task board">
+        <section class="column" data-column="backlog">
+          <header class="column-header">
+            <div><span class="column-dot" aria-hidden="true"></span><h2>Backlog</h2></div>
+            <span class="column-count" data-count="backlog">0</span>
+          </header>
+          <div class="column-list" data-list="backlog"></div>
+        </section>
+        <section class="column" data-column="todo">
+          <header class="column-header">
+            <div><span class="column-dot" aria-hidden="true"></span><h2>To Do</h2></div>
+            <span class="column-count" data-count="todo">0</span>
+          </header>
+          <div class="column-list" data-list="todo"></div>
+        </section>
+        <section class="column" data-column="in-progress">
+          <header class="column-header">
+            <div><span class="column-dot" aria-hidden="true"></span><h2>In Progress</h2></div>
+            <span class="column-count" data-count="in-progress">0</span>
+          </header>
+          <div class="column-list" data-list="in-progress"></div>
+        </section>
+        <section class="column" data-column="review">
+          <header class="column-header">
+            <div><span class="column-dot" aria-hidden="true"></span><h2>Review</h2></div>
+            <span class="column-count" data-count="review">0</span>
+          </header>
+          <div class="column-list" data-list="review"></div>
+        </section>
+        <section class="column" data-column="done">
+          <header class="column-header">
+            <div><span class="column-dot" aria-hidden="true"></span><h2>Done</h2></div>
+            <span class="column-count" data-count="done">0</span>
+          </header>
+          <div class="column-list" data-list="done"></div>
+        </section>
+      </main>
+    </div>
+
+    <div class="chat-layer" id="chatLayer" aria-hidden="true">
+      <button class="chat-backdrop" id="chatBackdrop" type="button" aria-label="Close conversation"></button>
+      <section class="chat-panel" id="chatPanel" aria-label="Codex conversation">
+        <header class="chat-header">
+          <button class="icon-button" id="closeChatButton" type="button" aria-label="Back to board" title="Back to board">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="19" height="19">
+              <path d="m15 18-6-6 6-6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <div class="chat-identity">
+            <h2 id="chatTitle">Conversation</h2>
+            <p id="chatFolder"></p>
+          </div>
+          <div class="chat-status" id="chatStatus">Idle</div>
+        </header>
+
+        <div class="message-scroll" id="messageScroll">
+          <div class="message-list" id="messageList"></div>
+        </div>
+
+        <div class="request-list" id="requestList" aria-live="polite"></div>
+
+        <form class="composer" id="composerForm">
+          <label class="sr-only" for="messageInput">Message Codex</label>
+          <textarea id="messageInput" rows="1" placeholder="Message Codex…" autocomplete="off"></textarea>
+          <button class="send-button" id="sendButton" type="submit" aria-label="Send message">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18">
+              <path d="m5 12 7-7 7 7M12 5v14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+        </form>
+      </section>
+    </div>
+
+    <dialog class="new-chat-dialog" id="newChatDialog">
+      <form id="newChatForm">
+        <div class="dialog-heading">
+          <div>
+            <h2>New Codex chat</h2>
+            <p>Choose the folder Codex should work in.</p>
+          </div>
+          <button class="icon-button" id="closeDialogButton" type="button" aria-label="Close">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18">
+              <path d="m7 7 10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+        <label for="cwdInput">Working folder</label>
+        <input id="cwdInput" name="cwd" list="knownFolders" required placeholder="/Users/you/Workspace/project" spellcheck="false" />
+        <datalist id="knownFolders"></datalist>
+        <p class="field-error" id="newChatError" role="alert"></p>
+        <div class="dialog-actions">
+          <button class="secondary-button" id="cancelNewChatButton" type="button">Cancel</button>
+          <button class="primary-button" id="createChatButton" type="submit">Create chat</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,12 @@
+data/
+.impeccable/
+.codex/
+.env
+.env.*
+!.env.example
+.npmrc
+node_modules/
+coverage/
+*.log
+*.tgz
+.DS_Store
