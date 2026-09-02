@@ -49,6 +49,28 @@ test("invalid columns and duplicate task IDs are rejected", async (context) => {
     ]),
     /Duplicate threadId/,
   );
+  await assert.rejects(
+    store.update([{ threadId: "unknown", column: "todo", order: 0 }]),
+    /known Codex tasks/,
+  );
+});
+
+test("board state strips extra properties", async (context) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "codex-kanban-minimal-state-"));
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  const filePath = path.join(directory, "board.json");
+  await writeFile(
+    filePath,
+    `${JSON.stringify([{ threadId: "thread-a", column: "todo", order: 0, transcript: "no" }])}\n`,
+    "utf8",
+  );
+
+  const store = new BoardStore(filePath);
+  await store.load();
+  await store.update([{ threadId: "thread-a", column: "done", order: 0, extra: "no" }]);
+  assert.deepEqual(JSON.parse(await readFile(filePath, "utf8")), [
+    { threadId: "thread-a", column: "done", order: 0 },
+  ]);
 });
 
 test("board state uses the native per-user data location", () => {
@@ -122,12 +144,16 @@ test("failed atomic writes leave no partial file and later writes can recover", 
   const filePath = path.join(directory, "board.json");
   const store = new BoardStore(filePath);
   await store.load();
+  await store.syncThreadIds(["thread-a"]);
 
+  await rm(filePath);
   await mkdir(filePath);
   await assert.rejects(
     store.update([{ threadId: "thread-a", column: "todo", order: 0 }]),
   );
-  assert.deepEqual(store.cards, []);
+  assert.deepEqual(store.cards, [
+    { threadId: "thread-a", column: "backlog", order: 0 },
+  ]);
   assert.deepEqual(
     (await readdir(directory)).filter((name) => name.endsWith(".tmp")),
     [],

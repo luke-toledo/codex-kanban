@@ -1,38 +1,87 @@
 # Codex Kanban
 
-An unofficial, local-only Kanban board for native Codex chats. Drag chats between Backlog, To do, In progress, Review, and Done, inspect what is happening, then jump to the exact conversation in Codex when you need to work.
+A visual home for people whose Codex chats have become a second inbox.
 
-Your Codex installation keeps the conversations. Codex Kanban stores only each chat ID, column, and order.
+Codex Kanban puts your existing native Codex tasks on one board. See what is waiting, what is moving, and what is actually done—without adding another project-management system.
 
-Codex chats are deliberately read-only here. The app cannot create chats, send messages, answer questions, or approve actions. Its only write is your Kanban placement.
+It is deliberately a visual organization layer for people who struggle to keep parallel Codex work straight—not another place to do the work.
 
-The ↗ action on every card and the link below every conversation preview open that exact chat in the Codex desktop app.
+![Codex Kanban showing fake chats organized across five columns](docs/codex-kanban-demo.jpg)
+
+_The screenshot uses fake example data. No private Codex chats are shown._
+
+## What it does
+
+- Organizes native Codex tasks into Backlog, To Do, In Progress, Review, and Done.
+- Lets you drag cards between columns.
+- Shows a read-only conversation preview when you open a card.
+- Deep-links each card to the exact task in the Codex desktop app.
+
+It cannot create Codex tasks, send messages, answer questions, approve actions, or edit Codex data. Its only write is the local Kanban position of each card.
 
 ## Quick start
 
-You need:
-
-- macOS (currently tested; Windows and Linux are unverified)
-- Node.js 20 or newer
-- the [Codex CLI](https://learn.chatgpt.com/docs/codex/cli) installed and signed in
-
-From the folder where you normally work, run:
+You need macOS, Node.js 20 or newer, and the [Codex CLI](https://learn.chatgpt.com/docs/codex/cli) installed and signed in. Windows and Linux are not yet verified.
 
 ```sh
 npx --yes github:luke-toledo/codex-kanban
 ```
 
-The browser opens automatically at <http://127.0.0.1:4173>. Press `Ctrl+C` in the terminal to stop it. Start it again with the same command; your board order remains.
+The command downloads the current source from GitHub, starts the board, and opens a token-authenticated local tab at `127.0.0.1:4173`. Keep the terminal open. Press `Ctrl+C` to stop it; run the same command to start again. Your board positions survive restarts.
 
-## Fork it
+Only run this command from a repository or fork you trust. For a reproducible install, clone the repository, inspect it, check out a commit you trust, and run `npm start`.
 
-Fork the repository on GitHub, then substitute your username:
+## Is any data shared?
+
+Codex Kanban itself sends no chat or board data to the project author or to a remote project server. It has no analytics, ads, trackers, cloud database, third-party browser assets, or third-party npm runtime packages.
+
+| Data | Where it goes | Saved by Kanban? |
+| --- | --- | --- |
+| Task titles, folders, last-updated time, and status | Local Codex process → local server → your browser | No |
+| A conversation you open, including messages and visible activity | Local Codex process → local server → your browser | No |
+| Card ID, column, and order | Local board file on your computer | Yes |
+| Private launch key | Server memory and port-scoped browser session storage | Valid only for that server process; browser copy normally lasts until the tab closes |
+
+The browser temporarily holds the Codex content it displays. Browser extensions, screen sharing, screenshots, and anyone using your unlocked computer may still see it.
+
+The separately installed Codex app and CLI keep their normal OpenAI network and data behavior. This project reads from Codex locally; it does not change or replace Codex's own data controls. Installing or updating with `npx` contacts GitHub to download executable source.
+
+## Security and safe use
+
+The current source and live HTTP boundary were reviewed for the intended local, single-user setup. No critical or high-severity issue was found in that boundary. This is not a formal third-party audit.
+
+Use it like this:
+
+- Run it only on your own trusted computer and browser profile.
+- Use the local tab opened by the command.
+- Never share the launch URL; restarting the app rotates its private key.
+- Never expose port `4173` through a tunnel, proxy, LAN address, container port, or public host.
+- Run one instance at a time and stop it with `Ctrl+C` when you are finished.
+- Never run an untrusted fork. The downloaded code runs with your user permissions and can read the Codex data available to your account.
+
+The app binds only to IPv4 loopback, checks the exact Host and mutation Origin, rejects cross-site browser requests, and stores a per-launch 256-bit key in port-scoped browser session storage. It also disables CORS and applies a restrictive Content Security Policy. Calls to the Codex App Server are allowlisted to initialization, task listing, and task reading; unexpected write or approval requests fail closed.
+
+See [SECURITY.md](SECURITY.md) for the full threat model and known limitations.
+
+## Local storage
+
+The board file stores only `{ threadId, column, order }`. No transcript or credential is written to that file.
+
+- macOS: `~/Library/Application Support/codex-kanban/board.json`
+- Linux: `~/.local/state/codex-kanban/board.json` or `$XDG_STATE_HOME`
+- Windows: `%APPDATA%\\codex-kanban\\board.json`
+
+New directories and files are created with private user permissions where the operating system supports them. Writes use a temporary file and atomic rename, so a failed write cannot leave half-written JSON. Moves appear immediately; if saving fails, the board reloads the last saved state.
+
+Early local versions stored `data/board.json` inside the repository. The current app copies that file once and leaves it as a backup. After confirming the new board is correct, you may delete that old file yourself.
+
+## Fork or develop
+
+Fork the repository, review the changes, then substitute your username:
 
 ```sh
 npx --yes github:YOUR_GITHUB_USERNAME/codex-kanban
 ```
-
-No dependency installation, account, database, or cloud deployment is required beyond your existing Codex sign-in.
 
 For local development:
 
@@ -42,48 +91,22 @@ cd codex-kanban
 npm start
 ```
 
-## Persistence
-
-Every move is saved before the UI reports success. Writes are serialized and atomic, so rapid moves and interrupted shutdowns cannot leave a partial board file.
-
-State lives outside the repository and survives restarts, upgrades, new clones, and `npx` cache cleanup:
-
-- macOS: `~/Library/Application Support/codex-kanban/board.json`
-- Linux: `~/.local/state/codex-kanban/board.json` (or `$XDG_STATE_HOME`)
-- Windows: `%APPDATA%\\codex-kanban\\board.json`
-
-Existing installs automatically copy the old `data/board.json` layout once. The legacy file is left untouched as a backup.
-
-## Security model
-
-This is a trusted, single-user desktop tool—not a hosted web application.
-
-- It binds only to `127.0.0.1` and rejects untrusted Host, Origin, and cross-site requests.
-- Every launch creates a private browser session protected by a random token.
-- It does not enable CORS or expose the Codex App Server over the network.
-- Browser events are allowlisted and stripped to the fields the UI needs.
-- Outgoing Codex requests are allowlisted to initialization, task listing, and task reading. Unexpected action requests fail closed.
-
-Do **not** expose it with a tunnel, reverse proxy, LAN binding, container port, or public deployment. The local API can read your Codex chat content and update Kanban placement. It intentionally has no remote-user authentication or isolation.
-
-See [SECURITY.md](SECURITY.md) for the complete boundary.
-
-## How it works
-
-The Node server starts `codex app-server --stdio` as a child process. It uses the signed-in Codex CLI only to list and read task history and observe status updates. It cannot create or modify Codex work and never edits the Codex database directly.
-
-Card links use the [official Codex deep-link format](https://learn.chatgpt.com/docs/reference/commands#deep-links). A newly created chat may require reopening Codex before the desktop app notices it.
-
-Codex App Server is currently experimental. This release is tested with `codex-cli 0.150.1`, so a future CLI protocol change may require an update.
-
-## Development
+Run the tests with:
 
 ```sh
 npm test
 ```
 
-The optional live check lists your tasks and reads one existing task without creating or changing anything:
+The optional live check lists tasks and reads one existing task without creating or changing anything:
 
 ```sh
 npm run test:live
 ```
+
+## How it works
+
+The Node server starts `codex app-server --stdio` as a child process. The browser talks only to the local Node server on `127.0.0.1`; the server talks to Codex over local standard input/output. Card links use the [official Codex deep-link format](https://learn.chatgpt.com/docs/reference/commands#deep-links).
+
+Codex App Server is experimental. This release is tested with `codex-cli 0.150.1`, so a future CLI protocol change may require an update.
+
+MIT licensed. Unofficial and not affiliated with OpenAI.

@@ -1,6 +1,27 @@
 import { codexThreadUrl } from "./deep-link.js";
 
 const COLUMNS = ["backlog", "todo", "in-progress", "review", "done"];
+const SESSION_KEY = "codex-kanban-session";
+const SESSION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+const launchToken = new URLSearchParams(location.search).get("token");
+let sessionToken = null;
+if (SESSION_TOKEN_PATTERN.test(launchToken || "")) {
+  sessionToken = launchToken;
+  try {
+    sessionStorage.setItem(SESSION_KEY, sessionToken);
+  } catch {
+    // The current page can still use the launch token when storage is disabled.
+  }
+  history.replaceState(history.state, "", `${location.pathname}${location.hash}`);
+} else {
+  try {
+    const storedToken = sessionStorage.getItem(SESSION_KEY);
+    if (SESSION_TOKEN_PATTERN.test(storedToken || "")) sessionToken = storedToken;
+  } catch {
+    // The recovery screen below explains how to open a fresh private session.
+  }
+}
 
 const state = {
   threads: [],
@@ -15,6 +36,7 @@ const state = {
 
 const elements = {
   appShell: document.querySelector(".app-shell"),
+  sessionRequired: document.querySelector("#sessionRequired"),
   boardSummary: document.querySelector("#boardSummary"),
   connectionStatus: document.querySelector("#connectionStatus"),
   connectionLabel: document.querySelector("#connectionLabel"),
@@ -36,17 +58,44 @@ const columnLists = new Map(
 );
 
 let toastTimer = null;
+let eventSource = null;
 
 async function api(url, options = {}) {
+  if (!url.startsWith("/api/")) throw new Error("Only local API requests are allowed");
+  if (!sessionToken) throw new Error("Restart Codex Kanban to open a private browser session");
   const requestOptions = { ...options };
+  requestOptions.headers = {
+    ...requestOptions.headers,
+    "X-Codex-Kanban-Token": sessionToken,
+  };
   if (requestOptions.body && typeof requestOptions.body !== "string") {
     requestOptions.headers = { ...requestOptions.headers, "Content-Type": "application/json" };
     requestOptions.body = JSON.stringify(requestOptions.body);
   }
   const response = await fetch(url, requestOptions);
   const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) showSessionRequired();
   if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
   return payload;
+}
+
+function showSessionRequired() {
+  eventSource?.close();
+  eventSource = null;
+  state.activeThreadId = null;
+  state.messages = [];
+  state.loadingConversation = false;
+  state.conversationError = null;
+  state.returnFocusElement = null;
+  elements.messageList.replaceChildren();
+  elements.chatTitle.textContent = "Conversation";
+  elements.chatFolder.textContent = "";
+  elements.chatStatus.textContent = "Idle";
+  elements.chatLayer.classList.remove("open");
+  elements.chatLayer.setAttribute("aria-hidden", "true");
+  elements.appShell.inert = false;
+  elements.appShell.hidden = true;
+  elements.sessionRequired.hidden = false;
 }
 
 function makeElement(tag, className, text) {
@@ -318,107 +367,12 @@ function renderMessages({ forceBottom = false } = {}) {
   }
 }
 
-function normalizeLiveItem(item, turnId = null) {
-  if (!item) return null;
-  if (item.type === "message" || item.type === "activity") return item;
-  if (item.type === "agentMessage") {
-    return { id: item.id, turnId, type: "message", role: "assistant", text: item.text || "" };
-  }
-  if (item.type === "userMessage") {
-    const text = (item.content || [])
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
-      .join("\n");
-    return {
-      id: item.id,
-      turnId,
-      type: "message",
-      role: "user",
-      text,
-      clientId: item.clientId || null,
-    };
-  }
-  if (item.type === "commandExecution") {
-    return {
-      id: item.id,
-      turnId,
-      type: "activity",
-      label: item.status === "inProgress" ? "Running command" : "Command",
-      detail: item.command || "",
-    };
-  }
-  if (item.type === "fileChange") {
-    return {
-      id: item.id,
-      turnId,
-      type: "activity",
-      label: "File changes",
-      detail: (item.changes || [])
-        .map((change) => {
-          const kind = change.kind?.type || change.kind || "change";
-          return [
-            `${kind}: ${change.path}`,
-            change.kind?.move_path ? `Move to: ${change.kind.move_path}` : null,
-            change.diff || null,
-          ]
-            .filter(Boolean)
-            .join("\n");
-        })
-        .join("\n\n"),
-    };
-  }
-  if (item.type === "mcpToolCall") {
-    return {
-      id: item.id,
-      turnId,
-      type: "activity",
-      label: `${item.server}: ${item.tool}`,
-      detail: "Tool call",
-    };
-  }
-  if (item.type === "webSearch") {
-    return { id: item.id, turnId, type: "activity", label: "Web search", detail: item.query || "" };
-  }
-  if (item.type === "contextCompaction") {
-    return { id: item.id, turnId, type: "activity", label: "Context compacted", detail: "" };
-  }
-  return null;
-}
-
-function upsertLiveItem(item) {
-  if (!item) return;
-  let index = state.messages.findIndex((candidate) => candidate.id === item.id);
-  if (index < 0 && item.clientId) {
-    index = state.messages.findIndex((candidate) => candidate.clientId === item.clientId);
-  }
-  if (index >= 0) state.messages[index] = { ...state.messages[index], ...item, streaming: false };
-  else state.messages.push(item);
-  renderMessages();
-}
-
-function appendAgentDelta(params) {
-  let message = state.messages.find((candidate) => candidate.id === params.itemId);
-  if (!message) {
-    message = {
-      id: params.itemId,
-      turnId: params.turnId,
-      type: "message",
-      role: "assistant",
-      text: "",
-      streaming: true,
-    };
-    state.messages.push(message);
-  }
-  message.text += params.delta || "";
-  message.streaming = true;
-  renderMessages();
-}
-
 function connectEvents() {
-  const events = new EventSource("/api/events");
-  events.onopen = () => setConnection("Connected", "ready");
-  events.onerror = () => setConnection("Reconnecting", "loading");
-  events.onmessage = (event) => {
+  eventSource?.close();
+  eventSource = new EventSource(`/api/events?token=${encodeURIComponent(sessionToken)}`);
+  eventSource.onopen = () => setConnection("Connected", "ready");
+  eventSource.onerror = () => setConnection("Reconnecting", "loading");
+  eventSource.onmessage = (event) => {
     const payload = JSON.parse(event.data);
     if (payload.type === "connected") return;
     if (payload.type === "fatal") {
@@ -440,14 +394,6 @@ function handleCodexEvent(message) {
   const params = message.params || {};
   const isActive = params.threadId === state.activeThreadId;
 
-  if (message.method === "item/agentMessage/delta" && isActive) {
-    appendAgentDelta(params);
-    return;
-  }
-  if ((message.method === "item/started" || message.method === "item/completed") && isActive) {
-    upsertLiveItem(normalizeLiveItem(params.item, params.turnId));
-    return;
-  }
   if (message.method === "turn/started") {
     const thread = state.threads.find((candidate) => candidate.id === params.threadId);
     if (thread) thread.status = "active";
@@ -519,8 +465,16 @@ elements.refreshButton.addEventListener("click", () => loadThreads());
 elements.closeChatButton.addEventListener("click", () => closeThread());
 elements.chatBackdrop.addEventListener("click", () => closeThread());
 
+function threadIdFromHash() {
+  try {
+    return decodeURIComponent(location.hash.replace(/^#/, ""));
+  } catch {
+    return "";
+  }
+}
+
 window.addEventListener("popstate", () => {
-  const threadId = decodeURIComponent(location.hash.replace(/^#/, ""));
+  const threadId = threadIdFromHash();
   if (threadId) openThread(threadId, { updateHistory: false });
   else closeThread({ updateHistory: false });
 });
@@ -531,15 +485,20 @@ document.addEventListener("keydown", (event) => {
 });
 
 async function initialize() {
+  if (!sessionToken) {
+    showSessionRequired();
+    return;
+  }
   try {
     const health = await api("/api/health");
     setConnection(health.ok ? "Connected" : "Starting", health.ok ? "ready" : "loading");
   } catch {
     setConnection("Disconnected", "error");
+    if (!elements.sessionRequired.hidden) return;
   }
   connectEvents();
   await loadThreads();
-  const initialThreadId = decodeURIComponent(location.hash.replace(/^#/, ""));
+  const initialThreadId = threadIdFromHash();
   if (initialThreadId && state.threads.some((thread) => thread.id === initialThreadId)) {
     openThread(initialThreadId, { updateHistory: false });
   }

@@ -10,12 +10,7 @@ import { CodexClient } from "./lib/codex-client.mjs";
 import { assertLocalMutation, assertLocalRequest, HttpError } from "./lib/http-security.mjs";
 import { normalizeConversation, normalizeThread } from "./lib/normalize.mjs";
 import { publicCodexNotification } from "./lib/public-events.mjs";
-import {
-  createSessionCookie,
-  createSessionToken,
-  hasValidSession,
-  isValidBootstrapToken,
-} from "./lib/session-auth.mjs";
+import { createSessionToken, isValidSessionToken } from "./lib/session-auth.mjs";
 import { getBoardStatePath } from "./lib/state-path.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -29,6 +24,7 @@ const ORIGIN = `http://${HOST}:${PORT}`;
 const MAX_EVENT_CLIENTS = 8;
 const MAX_EVENT_BYTES = 64 * 1024;
 const MAX_EVENT_CLIENT_BUFFER = 256 * 1024;
+const MAX_JSON_BYTES = 512 * 1024;
 const sessionToken = createSessionToken();
 const board = new BoardStore(getBoardStatePath(), {
   legacyFilePath: path.join(ROOT, "data", "board.json"),
@@ -43,7 +39,10 @@ codex.on("notification", (message) => {
   const publicMessage = publicCodexNotification(message);
   if (publicMessage) broadcast({ type: "codex", message: publicMessage });
 });
-codex.on("fatal", (error) => broadcast({ type: "fatal", message: error.message }));
+codex.on("fatal", (error) => {
+  console.error(error);
+  broadcast({ type: "fatal", message: "The Codex connection stopped. Restart Codex Kanban." });
+});
 
 const server = createServer(async (request, response) => {
   try {
@@ -51,22 +50,18 @@ const server = createServer(async (request, response) => {
     assertLocalRequest(request, PORT);
     const url = new URL(request.url, ORIGIN);
 
-    if (request.method === "GET" && url.pathname === "/" && url.searchParams.has("token")) {
-      if (!isValidBootstrapToken(url.searchParams.get("token"), sessionToken)) {
-        return json(response, 401, { error: "Invalid session link" });
-      }
-      response.writeHead(303, {
-        "Cache-Control": "no-store",
-        Location: "/",
-        "Set-Cookie": createSessionCookie(sessionToken),
-      });
-      return response.end();
-    }
-
-    if (!hasValidSession(request.headers.cookie, sessionToken)) {
-      if (request.method === "GET" && url.pathname === "/") {
+    if (request.method === "GET" && isStaticPath(url.pathname)) {
+      if (
+        url.pathname === "/" &&
+        url.searchParams.has("token") &&
+        !isValidSessionToken(url.searchParams.get("token"), sessionToken)
+      ) {
         return sessionRequired(response);
       }
+      return serveStatic(url.pathname, response);
+    }
+
+    if (!hasValidRequestToken(request, url)) {
       return json(response, 401, { error: "Restart Codex Kanban to open a private browser session" });
     }
 
@@ -85,13 +80,25 @@ const server = createServer(async (request, response) => {
       });
       response.write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
       eventClients.add(response);
-      const keepAlive = setInterval(() => response.write(": keepalive\n\n"), 20_000);
+      const keepAlive = setInterval(() => {
+        const line = ": keepalive\n\n";
+        if (
+          response.destroyed ||
+          response.writableEnded ||
+          response.writableLength + Buffer.byteLength(line) > MAX_EVENT_CLIENT_BUFFER
+        ) {
+          response.end();
+          cleanup();
+          return;
+        }
+        response.write(line);
+      }, 20_000);
       const cleanup = () => {
         clearInterval(keepAlive);
         eventClients.delete(response);
       };
-      request.on("close", cleanup);
-      response.on("error", cleanup);
+      response.once("close", cleanup);
+      response.once("error", cleanup);
       return;
     }
 
@@ -116,12 +123,12 @@ const server = createServer(async (request, response) => {
       return json(response, 200, normalizeConversation(result.thread));
     }
 
-    if (request.method === "GET") return serveStatic(url.pathname, response);
     return json(response, 404, { error: "Not found" });
   } catch (error) {
     const status = error.status || 500;
     if (status >= 500) console.error(error);
-    return json(response, status, { error: error.message || "Unexpected error" });
+    const message = status >= 500 ? "Unexpected error" : error.message;
+    return json(response, status, { error: message || "Unexpected error" });
   }
 });
 
@@ -168,15 +175,27 @@ function broadcast(payload) {
 
 async function readJson(request) {
   let body = "";
+  let bytes = 0;
   for await (const chunk of request) {
+    bytes += chunk.length;
+    if (bytes > MAX_JSON_BYTES) throw new HttpError(413, "Request body is too large");
     body += chunk;
-    if (body.length > 120_000) throw new Error("Request body is too large");
   }
   try {
     return JSON.parse(body || "{}");
   } catch {
-    throw new Error("Request body must be valid JSON");
+    throw new HttpError(400, "Request body must be valid JSON");
   }
+}
+
+function hasValidRequestToken(request, url) {
+  const header = request.headers["x-codex-kanban-token"];
+  const headerToken = Array.isArray(header) ? null : header;
+  const eventToken =
+    request.method === "GET" && url.pathname === "/api/events"
+      ? url.searchParams.get("token")
+      : null;
+  return isValidSessionToken(headerToken || eventToken, sessionToken);
 }
 
 function json(response, status, value) {
@@ -209,18 +228,20 @@ function sessionRequired(response) {
       .mark { display: grid; width: 42px; height: 42px; margin-bottom: 22px; place-items: center; border-radius: 13px; color: white; background: #1d1d1b; font-weight: 750; }
       h1 { margin: 0; font-size: 22px; letter-spacing: -0.03em; }
       p { margin: 10px 0 0; color: #686862; font-size: 14px; line-height: 1.55; }
-      code { display: block; margin-top: 20px; padding: 13px 14px; overflow-x: auto; border-radius: 11px; color: #292926; background: #eeeeea; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; white-space: nowrap; }
     </style>
   </head>
   <body>
     <main>
       <div class="mark" aria-hidden="true">K</div>
-      <h1>Private session expired</h1>
-      <p>Your board is safe. Stop the running command, then start Codex Kanban again. It will open a fresh private link automatically.</p>
-      <code>npx --yes github:luke-toledo/codex-kanban</code>
+      <h1>Private session required</h1>
+      <p>Your board is safe. Stop Codex Kanban, then run the same command again. It will open a fresh private link automatically.</p>
     </main>
   </body>
 </html>`);
+}
+
+function isStaticPath(urlPath) {
+  return ["/", "/app.js", "/deep-link.js", "/styles.css", "/favicon.ico"].includes(urlPath);
 }
 
 async function serveStatic(urlPath, response) {
@@ -236,14 +257,17 @@ async function serveStatic(urlPath, response) {
   }
   const selected = files[urlPath];
   if (!selected) return json(response, 404, { error: "Not found" });
-  response.writeHead(200, { "Content-Type": selected[1], "Cache-Control": "no-cache" });
+  response.writeHead(200, {
+    "Content-Type": selected[1],
+    "Cache-Control": urlPath === "/" ? "no-store" : "no-cache",
+  });
   createReadStream(path.join(PUBLIC_DIR, selected[0])).pipe(response);
 }
 
 function setSecurityHeaders(response) {
   response.setHeader(
     "Content-Security-Policy",
-    "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+    "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
   );
   response.setHeader("X-Content-Type-Options", "nosniff");
   response.setHeader("Cross-Origin-Opener-Policy", "same-origin");

@@ -21,13 +21,14 @@
     "server.mjs",
     "lib/",
     "public/",
+    "docs/codex-kanban-demo.jpg",
     "README.md",
     "SECURITY.md",
     "LICENSE"
   ],
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test test/board-store.test.mjs test/deep-link.test.mjs test/http-security.test.mjs test/normalize.test.mjs test/public-events.test.mjs test/read-only-contract.test.mjs test/session-auth.test.mjs",
+    "test": "node --test test/board-store.test.mjs test/deep-link.test.mjs test/http-security.test.mjs test/normalize.test.mjs test/public-events.test.mjs test/read-only-contract.test.mjs test/server-security.test.mjs test/session-auth.test.mjs",
     "test:live": "node --test --test-name-pattern='live App Server' test/live-smoke.test.mjs"
   },
   "engines": {

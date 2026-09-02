@@ -33,6 +33,8 @@ test("origin must exactly match the request host", () => {
   assert.equal(isAllowedOrigin("http://127.0.0.1:4173", "127.0.0.1:4173", PORT), true);
   assert.equal(isAllowedOrigin("http://localhost:4173", "127.0.0.1:4173", PORT), false);
   assert.equal(isAllowedOrigin("https://127.0.0.1:4173", "127.0.0.1:4173", PORT), false);
+  assert.equal(isAllowedOrigin("http://user@127.0.0.1:4173", "127.0.0.1:4173", PORT), false);
+  assert.equal(isAllowedOrigin("http://127.0.0.1:4173/path", "127.0.0.1:4173", PORT), false);
   assert.equal(isAllowedOrigin("http://attacker.example:4173", "attacker.example:4173", PORT), false);
   assert.equal(isAllowedOrigin(undefined, "127.0.0.1:4173", PORT), false);
 });

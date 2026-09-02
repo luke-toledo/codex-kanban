@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { publicCodexNotification } from "../lib/public-events.mjs";
 
-test("live command events omit output and unrelated App Server fields", () => {
+test("content-bearing live events never reach the browser", () => {
   const result = publicCodexNotification({
     method: "item/completed",
     params: {
@@ -19,21 +19,14 @@ test("live command events omit output and unrelated App Server fields", () => {
     },
   });
 
-  assert.deepEqual(result, {
-    method: "item/completed",
-    params: {
-      threadId: "thread-1",
-      turnId: "turn-1",
-      item: {
-        id: "item-1",
-        turnId: "turn-1",
-        type: "activity",
-        label: "Command",
-        detail: "npm test",
-        status: "completed",
-      },
-    },
-  });
+  assert.equal(result, null);
+  assert.equal(
+    publicCodexNotification({
+      method: "item/agentMessage/delta",
+      params: { threadId: "thread-1", delta: "private text" },
+    }),
+    null,
+  );
 });
 
 test("unknown App Server notifications are not sent to browsers", () => {
@@ -43,12 +36,36 @@ test("unknown App Server notifications are not sent to browsers", () => {
   );
 });
 
-test("errors expose only the message needed by the UI", () => {
+test("errors sent to the browser omit internal details", () => {
   assert.deepEqual(
     publicCodexNotification({
       method: "error",
       params: { threadId: "thread-1", error: { message: "Failed", stack: "private" } },
     }),
-    { method: "error", params: { threadId: "thread-1", message: "Failed" } },
+    { method: "error", params: { message: "Codex reported an error" } },
+  );
+});
+
+test("status-only events include only fields the board uses", () => {
+  assert.deepEqual(
+    publicCodexNotification({
+      method: "turn/completed",
+      params: { threadId: "thread-1", turnId: "turn-private", secret: "private" },
+    }),
+    { method: "turn/completed", params: { threadId: "thread-1" } },
+  );
+  assert.deepEqual(
+    publicCodexNotification({
+      method: "thread/status/changed",
+      params: {
+        threadId: "thread-1",
+        status: { type: "active", privateDetail: "private" },
+        secret: "private",
+      },
+    }),
+    {
+      method: "thread/status/changed",
+      params: { threadId: "thread-1", status: { type: "active" } },
+    },
   );
 });
