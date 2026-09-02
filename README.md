@@ -1,23 +1,34 @@
 # Codex Kanban
 
-A visual home for people whose Codex chats have become a second inbox.
+My Codex sidebar became a second inbox. I needed columns.
 
-Codex Kanban puts your existing native Codex tasks on one board. See what is waiting, what is moving, and what is actually done—without adding another project-management system.
+Codex Kanban is a pure, local Kanban view of the tasks already in Codex. Drag them around for your own mental sanity. When it is time to work, open the exact task in Codex.
 
-It is deliberately a visual organization layer for people who struggle to keep parallel Codex work straight—not another place to do the work.
+Built for people who struggle to keep parallel AI work organized. Me included.
 
 ![Codex Kanban showing fake chats organized across five columns](docs/codex-kanban-demo.jpg)
 
-_The screenshot uses fake example data. No private Codex chats are shown._
+_Fake data. Your chaos may vary._
 
-## What it does
+## That is basically the entire product
 
-- Organizes native Codex tasks into Backlog, To Do, In Progress, Review, and Done.
-- Lets you drag cards between columns.
-- Shows a read-only conversation preview when you open a card.
-- Deep-links each card to the exact task in the Codex desktop app.
+- Move tasks between Backlog, To Do, In Progress, Review, and Done.
+- Hide tasks you do not need to see.
+- Open a read-only preview.
+- Jump directly into the real task in Codex.
 
-It cannot create Codex tasks, send messages, answer questions, approve actions, or edit Codex data. Its only write is the local Kanban position of each card.
+It cannot create Codex tasks, send messages, answer questions, approve actions, or edit Codex data. Its only writes are local board metadata: task ID, column, order, and hidden state.
+
+## Things it proudly does not have
+
+- No accounts.
+- No telemetry.
+- No hosted server.
+- No cloud database.
+- No second chat box.
+- No productivity empire quietly becoming your new full-time job.
+
+One tiny local process runs on your own computer while the board is open. Nothing is hosted by this project.
 
 ## Quick start
 
@@ -39,7 +50,7 @@ Codex Kanban itself sends no chat or board data to the project author or to a re
 | --- | --- | --- |
 | Task titles, folders, last-updated time, and status | Local Codex process → local server → your browser | No |
 | A conversation you open, including messages and visible activity | Local Codex process → local server → your browser | No |
-| Card ID, column, and order | Local board file on your computer | Yes |
+| Card ID, column, order, and hidden state | Local board file on your computer | Yes |
 | Private launch key | Server memory and port-scoped browser session storage | Valid only for that server process; browser copy normally lasts until the tab closes |
 
 The browser temporarily holds the Codex content it displays. Browser extensions, screen sharing, screenshots, and anyone using your unlocked computer may still see it.
@@ -65,7 +76,7 @@ See [SECURITY.md](SECURITY.md) for the full threat model and known limitations.
 
 ## Local storage
 
-The board file stores only `{ threadId, column, order }`. No transcript or credential is written to that file.
+The board file stores only `{ threadId, column, order, hidden }`. No transcript or credential is written to that file.
 
 - macOS: `~/Library/Application Support/codex-kanban/board.json`
 - Linux: `~/.local/state/codex-kanban/board.json` or `$XDG_STATE_HOME`
@@ -107,6 +118,8 @@ npm run test:live
 
 The Node server starts `codex app-server --stdio` as a child process. The browser talks only to the local Node server on `127.0.0.1`; the server talks to Codex over local standard input/output. Card links use the [official Codex deep-link format](https://learn.chatgpt.com/docs/reference/commands#deep-links).
 
+Codex Desktop does not currently share its live running state with this separate read-only process. Kanban shows **Working** when it can verify that state and **Unknown** when it cannot, instead of guessing.
+
 Codex App Server is experimental. This release is tested with `codex-cli 0.150.1`, so a future CLI protocol change may require an update.
 
-MIT licensed. Unofficial and not affiliated with OpenAI.
+MIT licensed. Unofficial and not affiliated with OpenAI. Made by [Luke](https://x.com/lukesvg).

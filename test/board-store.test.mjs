@@ -14,23 +14,23 @@ test("new Codex tasks enter backlog and placement survives restart", async (cont
 
   await store.syncThreadIds(["thread-a", "thread-b"]);
   assert.deepEqual(store.cards, [
-    { threadId: "thread-a", column: "backlog", order: 0 },
-    { threadId: "thread-b", column: "backlog", order: 1 },
+    { threadId: "thread-a", column: "backlog", order: 0, hidden: false },
+    { threadId: "thread-b", column: "backlog", order: 1, hidden: false },
   ]);
 
   await store.update([
-    { threadId: "thread-a", column: "in-progress", order: 0 },
-    { threadId: "thread-b", column: "backlog", order: 0 },
+    { threadId: "thread-a", column: "in-progress", order: 0, hidden: true },
+    { threadId: "thread-b", column: "backlog", order: 0, hidden: false },
   ]);
   const reloaded = new BoardStore(filePath);
   await reloaded.load();
   assert.deepEqual(reloaded.cards, [
-    { threadId: "thread-b", column: "backlog", order: 0 },
-    { threadId: "thread-a", column: "in-progress", order: 0 },
+    { threadId: "thread-b", column: "backlog", order: 0, hidden: false },
+    { threadId: "thread-a", column: "in-progress", order: 0, hidden: true },
   ]);
 
   const persisted = JSON.parse(await readFile(filePath, "utf8"));
-  assert.deepEqual(Object.keys(persisted[0]).sort(), ["column", "order", "threadId"]);
+  assert.deepEqual(Object.keys(persisted[0]).sort(), ["column", "hidden", "order", "threadId"]);
 });
 
 test("invalid columns and duplicate task IDs are rejected", async (context) => {
@@ -40,7 +40,7 @@ test("invalid columns and duplicate task IDs are rejected", async (context) => {
 
   await assert.rejects(
     store.update([{ threadId: "thread-a", column: "maybe", order: 0 }]),
-    /valid column/,
+    /valid task ID, column/,
   );
   await assert.rejects(
     store.update([
@@ -52,6 +52,10 @@ test("invalid columns and duplicate task IDs are rejected", async (context) => {
   await assert.rejects(
     store.update([{ threadId: "unknown", column: "todo", order: 0 }]),
     /known Codex tasks/,
+  );
+  await assert.rejects(
+    store.update([{ threadId: "thread-a", column: "todo", order: 0, hidden: "yes" }]),
+    /hidden state/,
   );
 });
 
@@ -69,7 +73,7 @@ test("board state strips extra properties", async (context) => {
   await store.load();
   await store.update([{ threadId: "thread-a", column: "done", order: 0, extra: "no" }]);
   assert.deepEqual(JSON.parse(await readFile(filePath, "utf8")), [
-    { threadId: "thread-a", column: "done", order: 0 },
+    { threadId: "thread-a", column: "done", order: 0, hidden: false },
   ]);
 });
 
@@ -123,8 +127,8 @@ test("existing repository state migrates once without changing the legacy file",
   const migrated = new BoardStore(filePath, { legacyFilePath });
   await migrated.load();
   assert.deepEqual(migrated.cards, [
-    { threadId: "thread-a", column: "todo", order: 0 },
-    { threadId: "thread-b", column: "todo", order: 1 },
+    { threadId: "thread-a", column: "todo", order: 0, hidden: false },
+    { threadId: "thread-b", column: "todo", order: 1, hidden: false },
   ]);
   assert.deepEqual(JSON.parse(await readFile(legacyFilePath, "utf8")), legacyCards);
 
@@ -152,7 +156,7 @@ test("failed atomic writes leave no partial file and later writes can recover", 
     store.update([{ threadId: "thread-a", column: "todo", order: 0 }]),
   );
   assert.deepEqual(store.cards, [
-    { threadId: "thread-a", column: "backlog", order: 0 },
+    { threadId: "thread-a", column: "backlog", order: 0, hidden: false },
   ]);
   assert.deepEqual(
     (await readdir(directory)).filter((name) => name.endsWith(".tmp")),
@@ -162,6 +166,6 @@ test("failed atomic writes leave no partial file and later writes can recover", 
   await rm(filePath, { recursive: true });
   await store.update([{ threadId: "thread-a", column: "todo", order: 0 }]);
   assert.deepEqual(JSON.parse(await readFile(filePath, "utf8")), [
-    { threadId: "thread-a", column: "todo", order: 0 },
+    { threadId: "thread-a", column: "todo", order: 0, hidden: false },
   ]);
 });

@@ -14,6 +14,8 @@ test("task list omits the unused raw preview", () => {
     cwd: "/tmp/project",
   });
   assert.equal(Object.hasOwn(thread, "preview"), false);
+  assert.equal(thread.hidden, false);
+  assert.equal(normalizeThread({ id: "thread-b" }, { hidden: true }).hidden, true);
 });
 
 test("conversation normalization keeps messages and useful activity", () => {

@@ -12,11 +12,11 @@ At runtime, Kanban's own browser and Node code send no application data to an ex
 
 1. the local Node process communicates with `codex app-server` over standard input/output;
 2. the local browser communicates with Node over IPv4 loopback;
-3. only task IDs and Kanban positions are written to the board file.
+3. only task IDs, Kanban positions, and hidden flags are written to the board file.
 
 The task list sends each task's title, working folder, update time, and status to the authenticated local browser. Opening a card additionally sends its normalized messages and visible activity, which can include commands, file paths, diffs, web-search queries, plans, and local media paths. API responses are not cached. The browser holds this content transiently; Codex Kanban does not persist it.
 
-The persistent board file contains exactly `threadId`, `column`, and `order`. It contains no transcript or credential. All task IDs are added when the board syncs, including tasks the user has not manually moved.
+The persistent board file contains exactly `threadId`, `column`, `order`, and `hidden`. It contains no transcript or credential. All task IDs are added when the board syncs, including tasks the user has not manually moved.
 
 This boundary does not cover the separately installed Codex app/CLI, Node.js, browser, operating system, or GitHub. Codex retains its normal OpenAI network and data behavior. `npx` contacts GitHub and executes the downloaded project source with the user's permissions.
 

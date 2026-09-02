@@ -78,6 +78,8 @@ button {
 
 button:focus-visible,
 a:focus-visible,
+[role="button"]:focus-visible,
+summary:focus-visible,
 [tabindex="0"]:focus-visible {
   outline: 2px solid #4d6bff;
   outline-offset: 2px;
@@ -190,6 +192,104 @@ a:focus-visible,
 .connection[data-state="error"] .connection-dot {
   background: #dc625c;
   box-shadow: 0 0 0 3px rgb(220 98 92 / 0.12);
+}
+
+.hidden-toggle,
+.about-menu summary {
+  min-height: 40px;
+  border: 0;
+  border-radius: 11px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 12px;
+}
+
+.hidden-toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  cursor: pointer;
+  transition: color 140ms ease-out, background-color 140ms ease-out, opacity 140ms ease-out;
+}
+
+.hidden-toggle:hover:not(:disabled),
+.hidden-toggle[aria-pressed="true"] {
+  color: var(--ink);
+  background: rgb(25 25 24 / 0.06);
+}
+
+.hidden-toggle:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.hidden-count {
+  min-width: 19px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  color: #666660;
+  background: rgb(20 20 18 / 0.07);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.hidden-count[hidden] {
+  display: none;
+}
+
+.about-menu {
+  position: relative;
+}
+
+.about-menu summary {
+  display: flex;
+  align-items: center;
+  padding: 0 9px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.about-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.about-menu summary:hover,
+.about-menu[open] summary {
+  color: var(--ink);
+  background: rgb(25 25 24 / 0.06);
+}
+
+.about-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 260px;
+  padding: 15px;
+  border-radius: 14px;
+  color: var(--ink);
+  background: #fff;
+  box-shadow: 0 0 0 1px rgb(20 20 18 / 0.08), 0 14px 36px rgb(20 20 18 / 0.14);
+}
+
+.about-popover p {
+  margin: 0 0 13px;
+  color: #666660;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.about-popover a {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
 }
 
 .icon-button {
@@ -348,11 +448,20 @@ a:focus-visible,
   transform: scale(0.985);
 }
 
-.task-card h3 {
+.card-preview-button {
   flex: 1;
   min-width: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.card-title {
   display: -webkit-box;
-  margin: 0;
+  min-width: 0;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
@@ -368,25 +477,50 @@ a:focus-visible,
   gap: 8px;
 }
 
-.card-codex-link {
+.card-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  margin: -5px -5px 0 0;
+}
+
+.card-action {
   display: inline-grid;
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
   place-items: center;
-  margin: -4px -4px 0 0;
-  border-radius: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
   color: var(--muted);
+  background: transparent;
   cursor: pointer;
-  font-size: 15px;
-  line-height: 1;
   text-decoration: none;
   -webkit-user-drag: none;
 }
 
-.card-codex-link:hover {
+.card-codex-link {
+  width: 36px;
+  height: 36px;
+  color: #4f4f4a;
+}
+
+.card-action:hover {
   background: rgb(20 20 18 / 0.055);
-  color: var(--text);
+  color: var(--ink);
+}
+
+.task-card.is-hidden {
+  background: #f4f4f1;
+  box-shadow: inset 0 0 0 1px rgb(20 20 18 / 0.06);
+}
+
+.card-hidden-label {
+  flex: 0 0 auto;
+  color: #777771;
+  font-weight: 700;
 }
 
 .card-meta {
@@ -465,14 +599,17 @@ a:focus-visible,
 .chat-panel {
   position: absolute;
   display: flex;
-  inset: 10px;
+  top: 50%;
+  left: 50%;
+  width: min(900px, calc(100% - 32px));
+  height: min(860px, calc(100% - 32px));
   flex-direction: column;
   overflow: hidden;
   border-radius: 22px;
   opacity: 0;
   background: #fafaf8;
   box-shadow: 0 0 0 1px rgb(20 20 18 / 0.08), 0 24px 80px rgb(20 20 18 / 0.22);
-  transform: translateY(10px) scale(0.992);
+  transform: translate(-50%, calc(-50% + 10px)) scale(0.992);
   transition-property: opacity, transform;
   transition-duration: 190ms;
   transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
@@ -480,7 +617,7 @@ a:focus-visible,
 
 .chat-layer.open .chat-panel {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: translate(-50%, -50%) scale(1);
 }
 
 .chat-header {
@@ -529,6 +666,21 @@ a:focus-visible,
 .chat-status.working {
   color: #9b5b0e;
   background: #fff1d9;
+}
+
+.chat-status.error {
+  color: #9d3935;
+  background: #fde8e6;
+}
+
+.chat-status.unknown {
+  color: #787872;
+  background: #f0f0ec;
+}
+
+.chat-close-button {
+  flex: 0 0 auto;
+  border-radius: 999px;
 }
 
 .message-scroll {
@@ -709,7 +861,8 @@ a:focus-visible,
   }
 
   .chat-panel {
-    inset: 0;
+    width: 100%;
+    height: 100%;
     border-radius: 0;
   }
 
@@ -724,6 +877,25 @@ a:focus-visible,
 
   .chat-footer {
     padding: 10px 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  .brand p,
+  .about-menu,
+  .hidden-toggle-label {
+    display: none;
+  }
+
+  .hidden-toggle {
+    width: 40px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .hidden-count {
+    position: absolute;
+    margin: -25px -28px 0 0;
   }
 }
 

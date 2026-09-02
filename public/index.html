@@ -26,10 +26,31 @@
           </div>
         </div>
         <div class="app-actions">
+          <button class="hidden-toggle" id="hiddenToggleButton" type="button" aria-pressed="false" aria-label="Show hidden tasks" disabled>
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17">
+              <path d="M2.5 12s3.5-5.5 9.5-5.5 9.5 5.5 9.5 5.5-3.5 5.5-9.5 5.5S2.5 12 2.5 12Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
+              <circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7" />
+              <path d="m4 4 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+            </svg>
+            <span class="hidden-toggle-label" id="hiddenToggleLabel">Show hidden</span>
+            <span class="hidden-count" id="hiddenCount" hidden>0</span>
+          </button>
           <div class="connection" id="connectionStatus" data-state="loading">
             <span class="connection-dot" aria-hidden="true"></span>
             <span id="connectionLabel">Connecting</span>
           </div>
+          <details class="about-menu">
+            <summary>About</summary>
+            <div class="about-popover">
+              <p>A tiny local board for keeping too many Codex tasks out of your head.</p>
+              <a href="https://x.com/lukesvg" target="_blank" rel="noopener noreferrer">
+                <span>Made by Luke</span>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14">
+                  <path d="M8 16 16 8M9 8h7v7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </a>
+            </div>
+          </details>
           <button class="icon-button" id="refreshButton" type="button" aria-label="Refresh tasks" title="Refresh tasks">
             <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18">
               <path d="M20 11a8 8 0 1 0-2.35 5.65M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
@@ -81,16 +102,16 @@
       <button class="chat-backdrop" id="chatBackdrop" type="button" tabindex="-1" aria-label="Close conversation"></button>
       <section class="chat-panel" id="chatPanel" role="dialog" aria-modal="true" aria-labelledby="chatTitle">
         <header class="chat-header">
-          <button class="icon-button" id="closeChatButton" type="button" aria-label="Back to board" title="Back to board">
-            <svg aria-hidden="true" viewBox="0 0 24 24" width="19" height="19">
-              <path d="m15 18-6-6 6-6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </button>
           <div class="chat-identity">
             <h2 id="chatTitle">Conversation</h2>
             <p id="chatFolder"></p>
           </div>
-          <div class="chat-status" id="chatStatus">Idle</div>
+          <div class="chat-status unknown" id="chatStatus">Unknown</div>
+          <button class="icon-button chat-close-button" id="closeChatButton" type="button" aria-label="Close conversation" title="Close">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="21" height="21">
+              <path d="m7 7 10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+            </svg>
+          </button>
         </header>
 
         <div class="message-scroll" id="messageScroll">

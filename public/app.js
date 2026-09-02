@@ -26,6 +26,7 @@ if (SESSION_TOKEN_PATTERN.test(launchToken || "")) {
 const state = {
   threads: [],
   messages: [],
+  showHidden: false,
   activeThreadId: null,
   draggedId: null,
   suppressCardClick: false,
@@ -40,6 +41,9 @@ const elements = {
   boardSummary: document.querySelector("#boardSummary"),
   connectionStatus: document.querySelector("#connectionStatus"),
   connectionLabel: document.querySelector("#connectionLabel"),
+  hiddenToggleButton: document.querySelector("#hiddenToggleButton"),
+  hiddenToggleLabel: document.querySelector("#hiddenToggleLabel"),
+  hiddenCount: document.querySelector("#hiddenCount"),
   refreshButton: document.querySelector("#refreshButton"),
   chatLayer: document.querySelector("#chatLayer"),
   chatBackdrop: document.querySelector("#chatBackdrop"),
@@ -90,7 +94,9 @@ function showSessionRequired() {
   elements.messageList.replaceChildren();
   elements.chatTitle.textContent = "Conversation";
   elements.chatFolder.textContent = "";
-  elements.chatStatus.textContent = "Idle";
+  elements.chatStatus.textContent = "Unknown";
+  elements.chatStatus.className = "chat-status unknown";
+  elements.chatStatus.title = "";
   elements.chatLayer.classList.remove("open");
   elements.chatLayer.setAttribute("aria-hidden", "true");
   elements.appShell.inert = false;
@@ -103,6 +109,42 @@ function makeElement(tag, className, text) {
   if (className) element.className = className;
   if (text != null) element.textContent = text;
   return element;
+}
+
+function makeIcon(name) {
+  const namespace = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(namespace, "svg");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "17");
+  svg.setAttribute("height", "17");
+
+  const shapes = {
+    external: [
+      ["path", { d: "M8 16 16 8M9 8h7v7" }],
+    ],
+    hide: [
+      ["path", { d: "M2.5 12s3.5-5.5 9.5-5.5 9.5 5.5 9.5 5.5-3.5 5.5-9.5 5.5S2.5 12 2.5 12Z" }],
+      ["circle", { cx: "12", cy: "12", r: "2.5" }],
+      ["path", { d: "m4 4 16 16" }],
+    ],
+    show: [
+      ["path", { d: "M2.5 12s3.5-5.5 9.5-5.5 9.5 5.5 9.5 5.5-3.5 5.5-9.5 5.5S2.5 12 2.5 12Z" }],
+      ["circle", { cx: "12", cy: "12", r: "2.5" }],
+    ],
+  };
+
+  for (const [tag, attributes] of shapes[name]) {
+    const shape = document.createElementNS(namespace, tag);
+    for (const [attribute, value] of Object.entries(attributes)) shape.setAttribute(attribute, value);
+    shape.setAttribute("fill", "none");
+    shape.setAttribute("stroke", "currentColor");
+    shape.setAttribute("stroke-width", tag === "circle" ? "1.7" : "1.8");
+    shape.setAttribute("stroke-linecap", "round");
+    shape.setAttribute("stroke-linejoin", "round");
+    svg.append(shape);
+  }
+  return svg;
 }
 
 function setConnection(label, status = "ready") {
@@ -140,41 +182,79 @@ function activeThread() {
 }
 
 function renderBoard() {
+  const hiddenTotal = state.threads.filter((thread) => thread.hidden).length;
+  if (hiddenTotal === 0) state.showHidden = false;
+  elements.hiddenToggleButton.disabled = hiddenTotal === 0;
+  elements.hiddenToggleButton.setAttribute("aria-pressed", String(state.showHidden));
+  elements.hiddenToggleButton.setAttribute(
+    "aria-label",
+    state.showHidden ? "Hide hidden tasks" : `Show ${hiddenTotal} hidden tasks`,
+  );
+  elements.hiddenToggleLabel.textContent = state.showHidden ? "Hide hidden" : "Show hidden";
+  elements.hiddenCount.textContent = String(hiddenTotal);
+  elements.hiddenCount.hidden = hiddenTotal === 0;
+
   for (const column of COLUMNS) {
     const list = columnLists.get(column);
     list.replaceChildren();
-    const threads = state.threads
+    const columnThreads = state.threads
       .filter((thread) => thread.column === column)
       .sort((left, right) => left.order - right.order);
+    const threads = columnThreads.filter((thread) => !thread.hidden || state.showHidden);
     document.querySelector(`[data-count="${column}"]`).textContent = String(threads.length);
 
     if (threads.length === 0) {
-      list.append(makeElement("div", "empty-column", "Drop chats here"));
+      list.append(
+        makeElement("div", "empty-column", columnThreads.length ? "No visible chats" : "Drop chats here"),
+      );
       continue;
     }
 
     for (const thread of threads) list.append(createTaskCard(thread));
   }
-  elements.boardSummary.textContent = `${state.threads.length} Codex tasks · drag to organize`;
+  elements.boardSummary.textContent = hiddenTotal
+    ? state.showHidden
+      ? `${state.threads.length} Codex tasks · ${hiddenTotal} hidden shown`
+      : `${state.threads.length - hiddenTotal} visible · ${hiddenTotal} hidden`
+    : `${state.threads.length} Codex tasks · drag to organize`;
 }
 
 function createTaskCard(thread) {
   const card = makeElement("article", "task-card");
+  card.classList.toggle("is-hidden", thread.hidden);
   card.dataset.threadId = thread.id;
   card.draggable = true;
-  card.tabIndex = 0;
-  card.setAttribute("role", "button");
-  card.setAttribute("aria-label", `Open ${thread.title}`);
 
   const heading = makeElement("div", "card-heading");
-  heading.append(makeElement("h3", "", thread.title));
-  const codexLink = makeElement("a", "card-codex-link", "↗");
+  const previewButton = makeElement("button", "card-preview-button");
+  previewButton.type = "button";
+  previewButton.dataset.cardAction = "true";
+  previewButton.draggable = false;
+  previewButton.setAttribute("aria-label", `Preview ${thread.title}`);
+  previewButton.append(makeElement("span", "card-title", thread.title));
+  previewButton.addEventListener("click", () => openThread(thread.id));
+  heading.append(previewButton);
+
+  const actions = makeElement("div", "card-actions");
+  const hideButton = makeElement("button", "card-action card-hide-button");
+  hideButton.type = "button";
+  hideButton.dataset.cardAction = "true";
+  hideButton.draggable = false;
+  hideButton.title = thread.hidden ? "Show task" : "Hide task";
+  hideButton.setAttribute("aria-label", `${thread.hidden ? "Show" : "Hide"} ${thread.title}`);
+  hideButton.append(makeIcon(thread.hidden ? "show" : "hide"));
+  hideButton.addEventListener("click", () => setThreadHidden(thread.id, !thread.hidden));
+  actions.append(hideButton);
+
+  const codexLink = makeElement("a", "card-action card-codex-link");
   codexLink.href = codexThreadUrl(thread.id);
   codexLink.title = "Open in Codex";
   codexLink.setAttribute("aria-label", `Open ${thread.title} in Codex`);
   codexLink.dataset.cardAction = "true";
   codexLink.draggable = false;
-  heading.append(codexLink);
+  codexLink.append(makeIcon("external"));
+  actions.append(codexLink);
+  heading.append(actions);
   card.append(heading);
 
   const meta = makeElement("div", "card-meta");
@@ -182,7 +262,9 @@ function createTaskCard(thread) {
   folder.title = thread.cwd;
   meta.append(folder);
 
-  if (thread.status === "active") {
+  if (thread.hidden) {
+    meta.append(makeElement("span", "card-hidden-label", "Hidden"));
+  } else if (thread.status === "active") {
     meta.append(makeElement("span", "card-state", "Working"));
   } else {
     meta.append(makeElement("time", "", relativeTime(thread.updatedAt)));
@@ -193,14 +275,11 @@ function createTaskCard(thread) {
     if (event.target.closest("[data-card-action]")) return;
     if (!state.suppressCardClick) openThread(thread.id);
   });
-  card.addEventListener("keydown", (event) => {
-    if (event.target !== card) return;
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      openThread(thread.id);
-    }
-  });
   card.addEventListener("dragstart", (event) => {
+    if (event.target instanceof Element && event.target.closest(".card-actions")) {
+      event.preventDefault();
+      return;
+    }
     state.draggedId = thread.id;
     state.suppressCardClick = true;
     event.dataTransfer.effectAllowed = "move";
@@ -216,6 +295,16 @@ function createTaskCard(thread) {
     }, 0);
   });
   return card;
+}
+
+function setThreadHidden(threadId, hidden) {
+  const thread = state.threads.find((candidate) => candidate.id === threadId);
+  if (!thread) return;
+  thread.hidden = hidden;
+  renderBoard();
+  elements.hiddenToggleButton.focus();
+  showToast(hidden ? "Task hidden" : "Task shown");
+  persistBoard();
 }
 
 function moveCard(threadId, column, beforeThreadId = null) {
@@ -248,7 +337,12 @@ async function persistBoard() {
     await api("/api/board", {
       method: "PUT",
       body: {
-        cards: state.threads.map(({ id, column, order }) => ({ threadId: id, column, order })),
+        cards: state.threads.map(({ id, column, order, hidden }) => ({
+          threadId: id,
+          column,
+          order,
+          hidden: hidden === true,
+        })),
       },
     });
   } catch (error) {
@@ -278,9 +372,19 @@ function updateChatHeader() {
   if (!thread) return;
   elements.chatTitle.textContent = thread.title;
   elements.chatFolder.textContent = thread.cwd;
-  const working = thread.status === "active";
-  elements.chatStatus.textContent = working ? "Working" : "Idle";
-  elements.chatStatus.classList.toggle("working", working);
+  const statuses = {
+    active: { label: "Working", tone: "working", title: "This local Codex session is working" },
+    idle: { label: "Idle", tone: "idle", title: "This local Codex session is idle" },
+    systemError: { label: "Error", tone: "error", title: "Codex reported an error" },
+  };
+  const status = statuses[thread.status] ?? {
+    label: "Unknown",
+    tone: "unknown",
+    title: "Codex Desktop does not expose live status to this read-only view",
+  };
+  elements.chatStatus.textContent = status.label;
+  elements.chatStatus.className = `chat-status ${status.tone}`;
+  elements.chatStatus.title = status.title;
   elements.editInCodexLink.href = codexThreadUrl(thread.id);
   elements.editInCodexLink.setAttribute("aria-label", `Edit ${thread.title} in Codex`);
 }
@@ -462,6 +566,10 @@ for (const [column, list] of columnLists) {
 }
 
 elements.refreshButton.addEventListener("click", () => loadThreads());
+elements.hiddenToggleButton.addEventListener("click", () => {
+  state.showHidden = !state.showHidden;
+  renderBoard();
+});
 elements.closeChatButton.addEventListener("click", () => closeThread());
 elements.chatBackdrop.addEventListener("click", () => closeThread());
 
