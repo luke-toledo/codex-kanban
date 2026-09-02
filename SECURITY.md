@@ -11,11 +11,10 @@ Do not put it behind a tunnel, reverse proxy, public hostname, LAN address, cont
 The app can:
 
 - list and read native Codex chats;
-- create chats and send prompts;
-- stream selected Codex events;
-- answer approval requests only when the server can verify that the browser is showing the exact bounded action.
+- observe selected Codex status events;
+- save local Kanban placement.
 
-It stores only Codex chat IDs and Kanban placement in the operating system's user-state directory. It does not store transcripts, credentials, or approval history and does not write to the Codex database.
+Codex chat content is read-only. The app cannot create chats, send prompts, answer questions, or approve actions. It stores only Codex chat IDs and Kanban placement in the operating system's user-state directory. It does not store transcripts or credentials and does not write to the Codex database.
 
 ## Built-in boundaries
 
@@ -25,9 +24,8 @@ It stores only Codex chat IDs and Kanban placement in the operating system's use
 - cross-site request rejection, no CORS, restrictive CSP, and no response caching;
 - allowlisted and normalized browser event payloads with size, connection, and backpressure limits;
 - JSON request size limits;
-- server-side approval eligibility checks;
-- turn-only permission grants;
-- decline-only handling for session-wide writes, missing or oversized details, unknown requests, and MCP forms or URLs;
+- an outgoing App Server allowlist limited to initialization, task listing, and task reading;
+- fail-closed handling for unexpected App Server action requests;
 - private, atomic board-state writes.
 
 These controls reduce local web attacks and accidental exposure. They do not turn the project into a safe network service.

@@ -5,21 +5,20 @@ const COLUMNS = ["backlog", "todo", "in-progress", "review", "done"];
 const state = {
   threads: [],
   messages: [],
-  requests: [],
   activeThreadId: null,
   draggedId: null,
   suppressCardClick: false,
-  sending: false,
   loadingConversation: false,
-  defaultCwd: "",
+  conversationError: null,
+  returnFocusElement: null,
 };
 
 const elements = {
+  appShell: document.querySelector(".app-shell"),
   boardSummary: document.querySelector("#boardSummary"),
   connectionStatus: document.querySelector("#connectionStatus"),
   connectionLabel: document.querySelector("#connectionLabel"),
   refreshButton: document.querySelector("#refreshButton"),
-  newChatButton: document.querySelector("#newChatButton"),
   chatLayer: document.querySelector("#chatLayer"),
   chatBackdrop: document.querySelector("#chatBackdrop"),
   closeChatButton: document.querySelector("#closeChatButton"),
@@ -28,18 +27,7 @@ const elements = {
   chatStatus: document.querySelector("#chatStatus"),
   messageScroll: document.querySelector("#messageScroll"),
   messageList: document.querySelector("#messageList"),
-  requestList: document.querySelector("#requestList"),
-  composerForm: document.querySelector("#composerForm"),
-  messageInput: document.querySelector("#messageInput"),
-  sendButton: document.querySelector("#sendButton"),
-  newChatDialog: document.querySelector("#newChatDialog"),
-  newChatForm: document.querySelector("#newChatForm"),
-  cwdInput: document.querySelector("#cwdInput"),
-  knownFolders: document.querySelector("#knownFolders"),
-  closeDialogButton: document.querySelector("#closeDialogButton"),
-  cancelNewChatButton: document.querySelector("#cancelNewChatButton"),
-  createChatButton: document.querySelector("#createChatButton"),
-  newChatError: document.querySelector("#newChatError"),
+  editInCodexLink: document.querySelector("#editInCodexLink"),
   toast: document.querySelector("#toast"),
 };
 
@@ -102,14 +90,6 @@ function activeThread() {
   return state.threads.find((thread) => thread.id === state.activeThreadId) ?? null;
 }
 
-function requestThreadId(request) {
-  return request.params?.threadId || request.params?.conversationId || null;
-}
-
-function hasPendingRequest(threadId) {
-  return state.requests.some((request) => requestThreadId(request) === threadId);
-}
-
 function renderBoard() {
   for (const column of COLUMNS) {
     const list = columnLists.get(column);
@@ -153,9 +133,7 @@ function createTaskCard(thread) {
   folder.title = thread.cwd;
   meta.append(folder);
 
-  if (hasPendingRequest(thread.id)) {
-    meta.append(makeElement("span", "card-state", "Needs input"));
-  } else if (thread.status === "active") {
+  if (thread.status === "active") {
     meta.append(makeElement("span", "card-state", "Working"));
   } else {
     meta.append(makeElement("time", "", relativeTime(thread.updatedAt)));
@@ -236,7 +214,6 @@ async function loadThreads({ silent = false } = {}) {
     const result = await api("/api/threads");
     state.threads = result.threads;
     renderBoard();
-    updateKnownFolders();
     updateChatHeader();
     setConnection("Connected", "ready");
   } catch (error) {
@@ -247,38 +224,33 @@ async function loadThreads({ silent = false } = {}) {
   }
 }
 
-function updateKnownFolders() {
-  const folders = [...new Set(state.threads.map((thread) => thread.cwd).filter(Boolean))];
-  elements.knownFolders.replaceChildren(
-    ...folders.slice(0, 100).map((folder) => {
-      const option = document.createElement("option");
-      option.value = folder;
-      return option;
-    }),
-  );
-}
-
 function updateChatHeader() {
   const thread = activeThread();
   if (!thread) return;
   elements.chatTitle.textContent = thread.title;
   elements.chatFolder.textContent = thread.cwd;
-  const working = state.sending || thread.status === "active";
+  const working = thread.status === "active";
   elements.chatStatus.textContent = working ? "Working" : "Idle";
   elements.chatStatus.classList.toggle("working", working);
+  elements.editInCodexLink.href = codexThreadUrl(thread.id);
+  elements.editInCodexLink.setAttribute("aria-label", `Edit ${thread.title} in Codex`);
 }
 
 async function openThread(threadId, { updateHistory = true } = {}) {
   const thread = state.threads.find((candidate) => candidate.id === threadId);
   if (!thread) return;
+  if (!elements.chatLayer.classList.contains("open")) {
+    state.returnFocusElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }
   state.activeThreadId = threadId;
   state.messages = [];
   state.loadingConversation = true;
+  state.conversationError = null;
   elements.chatLayer.classList.add("open");
   elements.chatLayer.setAttribute("aria-hidden", "false");
+  elements.appShell.inert = true;
   updateChatHeader();
   renderMessages();
-  renderRequests();
   if (updateHistory) history.pushState({ threadId }, "", `#${encodeURIComponent(threadId)}`);
 
   try {
@@ -286,13 +258,13 @@ async function openThread(threadId, { updateHistory = true } = {}) {
     if (state.activeThreadId !== threadId) return;
     state.messages = result.messages;
   } catch (error) {
+    state.conversationError = error.message;
     showToast(`Could not open chat: ${error.message}`);
   } finally {
     if (state.activeThreadId === threadId) {
       state.loadingConversation = false;
       renderMessages({ forceBottom: true });
-      renderRequests();
-      elements.messageInput.focus();
+      elements.closeChatButton.focus();
     }
   }
 }
@@ -300,10 +272,13 @@ async function openThread(threadId, { updateHistory = true } = {}) {
 function closeThread({ updateHistory = true } = {}) {
   state.activeThreadId = null;
   state.messages = [];
-  state.sending = false;
+  state.conversationError = null;
   elements.chatLayer.classList.remove("open");
   elements.chatLayer.setAttribute("aria-hidden", "true");
+  elements.appShell.inert = false;
   if (updateHistory) history.pushState({}, "", `${location.pathname}${location.search}`);
+  if (state.returnFocusElement?.isConnected) state.returnFocusElement.focus();
+  state.returnFocusElement = null;
 }
 
 function renderMessages({ forceBottom = false } = {}) {
@@ -314,8 +289,10 @@ function renderMessages({ forceBottom = false } = {}) {
 
   if (state.loadingConversation) {
     elements.messageList.append(makeElement("div", "conversation-loading", "Loading conversation…"));
+  } else if (state.conversationError) {
+    elements.messageList.append(makeElement("div", "conversation-empty", "Could not load this conversation."));
   } else if (state.messages.length === 0) {
-    elements.messageList.append(makeElement("div", "conversation-empty", "New chat. Send the first message below."));
+    elements.messageList.append(makeElement("div", "conversation-empty", "No messages yet."));
   } else {
     for (const message of state.messages) {
       if (message.type === "message") {
@@ -437,163 +414,6 @@ function appendAgentDelta(params) {
   renderMessages();
 }
 
-async function sendMessage(event) {
-  event.preventDefault();
-  const text = elements.messageInput.value.trim();
-  if (!text || !state.activeThreadId || state.sending) return;
-
-  const clientUserMessageId = crypto.randomUUID();
-  const optimistic = {
-    id: `local-${clientUserMessageId}`,
-    clientId: clientUserMessageId,
-    type: "message",
-    role: "user",
-    text,
-  };
-  state.messages.push(optimistic);
-  elements.messageInput.value = "";
-  state.sending = true;
-  elements.sendButton.disabled = true;
-  updateChatHeader();
-  renderMessages({ forceBottom: true });
-
-  try {
-    await api(`/api/threads/${encodeURIComponent(state.activeThreadId)}/messages`, {
-      method: "POST",
-      body: { text, clientUserMessageId },
-    });
-  } catch (error) {
-    state.messages = state.messages.filter((message) => message.id !== optimistic.id);
-    elements.messageInput.value = text;
-    state.sending = false;
-    elements.sendButton.disabled = false;
-    updateChatHeader();
-    renderMessages();
-    showToast(`Message not sent: ${error.message}`);
-  }
-}
-
-function renderRequests() {
-  elements.requestList.replaceChildren();
-  if (!state.activeThreadId) return;
-  const pending = state.requests.filter((request) => requestThreadId(request) === state.activeThreadId);
-  for (const request of pending) {
-    if (request.method === "item/tool/requestUserInput") {
-      elements.requestList.append(createQuestionRequest(request));
-    } else {
-      elements.requestList.append(createApprovalRequest(request));
-    }
-  }
-}
-
-function createApprovalRequest(request) {
-  const card = makeElement("section", "request-card");
-  const labels = {
-    "item/commandExecution/requestApproval": "Approve command?",
-    "item/fileChange/requestApproval": "Approve file changes?",
-    "item/permissions/requestApproval": "Allow extra access?",
-    execCommandApproval: "Approve command?",
-    applyPatchApproval: "Approve file changes?",
-    "mcpServer/elicitation/request": "Tool request needs the native Codex UI",
-  };
-  card.append(makeElement("h3", "", labels[request.method] || "Codex needs your approval"));
-  const details = Array.isArray(request.details) ? request.details : [];
-  if (details.length) card.append(makeElement("div", "request-detail", details.join("\n")));
-
-  const actions = makeElement("div", "request-actions");
-  const decline = makeElement("button", "request-decline", "Decline");
-  decline.type = "button";
-  decline.addEventListener("click", () => answerRequest(request.requestId, { action: "decline" }));
-  actions.append(decline);
-
-  if (request.canAccept === true) {
-    const accept = makeElement("button", "request-accept", "Allow once");
-    accept.type = "button";
-    accept.addEventListener("click", () => answerRequest(request.requestId, { action: "accept" }));
-    actions.append(accept);
-  } else {
-    card.append(
-      makeElement(
-        "p",
-        "",
-        request.method === "mcpServer/elicitation/request"
-          ? "This V0 safely declines connector forms and external URLs."
-          : "Approval is disabled here. Use native Codex if more review is needed.",
-      ),
-    );
-  }
-  card.append(actions);
-  return card;
-}
-
-function createQuestionRequest(request) {
-  const form = makeElement("form", "request-card");
-  form.append(makeElement("h3", "", "Codex needs your answer"));
-  const inputs = [];
-  for (const [index, question] of (request.params?.questions || []).entries()) {
-    const field = makeElement("div", "question-field");
-    const inputId = `question-${request.requestId}-${index}`.replace(/[^A-Za-z0-9_-]/g, "-");
-    const label = makeElement("label", "", question.question);
-    label.htmlFor = inputId;
-    const input = document.createElement("input");
-    input.id = inputId;
-    input.required = true;
-    input.type = question.isSecret ? "password" : "text";
-    input.autocomplete = "off";
-    if (question.options?.length) {
-      const listId = `${inputId}-options`;
-      input.setAttribute("list", listId);
-      const datalist = document.createElement("datalist");
-      datalist.id = listId;
-      for (const optionValue of question.options) {
-        const option = document.createElement("option");
-        option.value = optionValue.label;
-        datalist.append(option);
-      }
-      field.append(label, input, datalist);
-    } else {
-      field.append(label, input);
-    }
-    inputs.push({ question, input });
-    form.append(field);
-  }
-  const actions = makeElement("div", "request-actions");
-  const submit = makeElement("button", "request-accept", "Send answer");
-  submit.type = "submit";
-  actions.append(submit);
-  form.append(actions);
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const answers = Object.fromEntries(
-      inputs.map(({ question, input }) => [question.id, { answers: [input.value] }]),
-    );
-    answerRequest(request.requestId, { answers });
-  });
-  return form;
-}
-
-async function answerRequest(requestId, body) {
-  try {
-    await api(`/api/requests/${encodeURIComponent(requestId)}/respond`, { method: "POST", body });
-    state.requests = state.requests.filter((request) => request.requestId !== requestId);
-    renderRequests();
-    renderBoard();
-  } catch (error) {
-    showToast(`Could not answer Codex: ${error.message}`);
-  }
-}
-
-async function loadRequests() {
-  try {
-    const result = await api("/api/requests");
-    state.requests = result.requests;
-    renderRequests();
-    renderBoard();
-  } catch (error) {
-    showToast(error.message);
-  }
-}
-
 function connectEvents() {
   const events = new EventSource("/api/events");
   events.onopen = () => setConnection("Connected", "ready");
@@ -608,25 +428,7 @@ function connectEvents() {
     }
     if (payload.type === "refresh") {
       loadThreads({ silent: true });
-      loadRequests();
       if (state.activeThreadId) loadConversationAfterTurn(state.activeThreadId);
-      return;
-    }
-    if (payload.type === "serverRequest") {
-      state.requests = state.requests.filter(
-        (request) => request.requestId !== payload.request.requestId,
-      );
-      state.requests.push(payload.request);
-      renderRequests();
-      renderBoard();
-      return;
-    }
-    if (payload.type === "serverRequestResolved") {
-      state.requests = state.requests.filter(
-        (request) => request.requestId !== payload.requestId,
-      );
-      renderRequests();
-      renderBoard();
       return;
     }
     if (payload.type !== "codex") return;
@@ -649,11 +451,7 @@ function handleCodexEvent(message) {
   if (message.method === "turn/started") {
     const thread = state.threads.find((candidate) => candidate.id === params.threadId);
     if (thread) thread.status = "active";
-    if (isActive) {
-      state.sending = true;
-      elements.sendButton.disabled = true;
-      updateChatHeader();
-    }
+    if (isActive) updateChatHeader();
     renderBoard();
     return;
   }
@@ -661,8 +459,6 @@ function handleCodexEvent(message) {
     const thread = state.threads.find((candidate) => candidate.id === params.threadId);
     if (thread) thread.status = "idle";
     if (isActive) {
-      state.sending = false;
-      elements.sendButton.disabled = false;
       updateChatHeader();
       loadConversationAfterTurn(params.threadId);
     }
@@ -681,11 +477,6 @@ function handleCodexEvent(message) {
     return;
   }
   if (message.method === "error") {
-    if (isActive) {
-      state.sending = false;
-      elements.sendButton.disabled = false;
-      updateChatHeader();
-    }
     showToast(params.message || "Codex reported an error");
   }
 }
@@ -698,34 +489,6 @@ async function loadConversationAfterTurn(threadId) {
     renderMessages({ forceBottom: true });
   } catch (error) {
     showToast(`Could not refresh chat: ${error.message}`);
-  }
-}
-
-function openNewChatDialog() {
-  elements.newChatError.textContent = "";
-  elements.cwdInput.value = activeThread()?.cwd || state.threads[0]?.cwd || state.defaultCwd;
-  elements.newChatDialog.showModal();
-  elements.cwdInput.select();
-}
-
-async function createNewChat(event) {
-  event.preventDefault();
-  const cwd = elements.cwdInput.value.trim();
-  if (!cwd) return;
-  elements.createChatButton.disabled = true;
-  elements.newChatError.textContent = "";
-  try {
-    const result = await api("/api/threads", { method: "POST", body: { cwd } });
-    elements.newChatDialog.close();
-    await loadThreads({ silent: true });
-    const exists = state.threads.some((thread) => thread.id === result.thread.id);
-    if (!exists) state.threads.unshift(result.thread);
-    renderBoard();
-    openThread(result.thread.id);
-  } catch (error) {
-    elements.newChatError.textContent = error.message;
-  } finally {
-    elements.createChatButton.disabled = false;
   }
 }
 
@@ -753,19 +516,8 @@ for (const [column, list] of columnLists) {
 }
 
 elements.refreshButton.addEventListener("click", () => loadThreads());
-elements.newChatButton.addEventListener("click", openNewChatDialog);
 elements.closeChatButton.addEventListener("click", () => closeThread());
 elements.chatBackdrop.addEventListener("click", () => closeThread());
-elements.composerForm.addEventListener("submit", sendMessage);
-elements.messageInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-    event.preventDefault();
-    elements.composerForm.requestSubmit();
-  }
-});
-elements.closeDialogButton.addEventListener("click", () => elements.newChatDialog.close());
-elements.cancelNewChatButton.addEventListener("click", () => elements.newChatDialog.close());
-elements.newChatForm.addEventListener("submit", createNewChat);
 
 window.addEventListener("popstate", () => {
   const threadId = decodeURIComponent(location.hash.replace(/^#/, ""));
@@ -774,20 +526,19 @@ window.addEventListener("popstate", () => {
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape" || elements.newChatDialog.open) return;
+  if (event.key !== "Escape") return;
   if (state.activeThreadId) closeThread();
 });
 
 async function initialize() {
   try {
     const health = await api("/api/health");
-    state.defaultCwd = health.defaultCwd || "";
     setConnection(health.ok ? "Connected" : "Starting", health.ok ? "ready" : "loading");
   } catch {
     setConnection("Disconnected", "error");
   }
   connectEvents();
-  await Promise.all([loadThreads(), loadRequests()]);
+  await loadThreads();
   const initialThreadId = decodeURIComponent(location.hash.replace(/^#/, ""));
   if (initialThreadId && state.threads.some((thread) => thread.id === initialThreadId)) {
     openThread(initialThreadId, { updateHistory: false });

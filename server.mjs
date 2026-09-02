@@ -2,7 +2,6 @@
 
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,7 +26,6 @@ if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65_535) {
   throw new Error("CODEX_KANBAN_PORT must be a number between 1 and 65535");
 }
 const ORIGIN = `http://${HOST}:${PORT}`;
-const LAUNCH_CWD = process.cwd();
 const MAX_EVENT_CLIENTS = 8;
 const MAX_EVENT_BYTES = 64 * 1024;
 const MAX_EVENT_CLIENT_BUFFER = 256 * 1024;
@@ -45,8 +43,6 @@ codex.on("notification", (message) => {
   const publicMessage = publicCodexNotification(message);
   if (publicMessage) broadcast({ type: "codex", message: publicMessage });
 });
-codex.on("serverRequest", (request) => broadcast({ type: "serverRequest", request }));
-codex.on("serverRequestResolved", (payload) => broadcast({ type: "serverRequestResolved", ...payload }));
 codex.on("fatal", (error) => broadcast({ type: "fatal", message: error.message }));
 
 const server = createServer(async (request, response) => {
@@ -72,7 +68,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/api/health") {
-      return json(response, 200, { ok: codex.ready, defaultCwd: LAUNCH_CWD });
+      return json(response, 200, { ok: codex.ready });
     }
 
     if (request.method === "GET" && url.pathname === "/api/events") {
@@ -104,55 +100,11 @@ const server = createServer(async (request, response) => {
       });
     }
 
-    if (request.method === "POST" && url.pathname === "/api/threads") {
-      assertLocalMutation(request, PORT);
-      const body = await readJson(request);
-      if (typeof body.cwd !== "string" || !path.isAbsolute(body.cwd)) {
-        return json(response, 400, { error: "Choose an absolute working folder" });
-      }
-      const cwdStats = await stat(body.cwd).catch(() => null);
-      if (!cwdStats?.isDirectory()) return json(response, 400, { error: "That folder does not exist" });
-
-      const result = await codex.startThread(body.cwd);
-      await board.syncThreadIds([result.thread.id]);
-      return json(response, 201, {
-        thread: normalizeThread(result.thread, board.get(result.thread.id)),
-      });
-    }
-
     if (request.method === "PUT" && url.pathname === "/api/board") {
       assertLocalMutation(request, PORT);
       const body = await readJson(request);
       const cards = await board.update(body.cards);
       return json(response, 200, { cards });
-    }
-
-    if (request.method === "GET" && url.pathname === "/api/requests") {
-      return json(response, 200, { requests: codex.getServerRequests() });
-    }
-
-    const requestResponseMatch = url.pathname.match(/^\/api\/requests\/([^/]+)\/respond$/);
-    if (request.method === "POST" && requestResponseMatch) {
-      assertLocalMutation(request, PORT);
-      const body = await readJson(request);
-      codex.respondToServerRequest(decodeURIComponent(requestResponseMatch[1]), body);
-      return json(response, 200, { ok: true });
-    }
-
-    const messageMatch = url.pathname.match(/^\/api\/threads\/([A-Za-z0-9-]+)\/messages$/);
-    if (request.method === "POST" && messageMatch) {
-      assertLocalMutation(request, PORT);
-      const body = await readJson(request);
-      const text = typeof body.text === "string" ? body.text.trim() : "";
-      if (!text) return json(response, 400, { error: "Message cannot be empty" });
-      if (text.length > 100_000) return json(response, 413, { error: "Message is too large" });
-
-      const result = await codex.startTurn(
-        messageMatch[1],
-        text,
-        typeof body.clientUserMessageId === "string" ? body.clientUserMessageId : null,
-      );
-      return json(response, 202, { turn: result.turn });
     }
 
     const threadMatch = url.pathname.match(/^\/api\/threads\/([A-Za-z0-9-]+)$/);

@@ -1,10 +1,12 @@
 # Codex Kanban
 
-An unofficial, local-only Kanban board for native Codex chats. Drag chats between Backlog, To do, In progress, Review, and Done—then open and continue them without leaving the board.
+An unofficial, local-only Kanban board for native Codex chats. Drag chats between Backlog, To do, In progress, Review, and Done, inspect what is happening, then jump to the exact conversation in Codex when you need to work.
 
 Your Codex installation keeps the conversations. Codex Kanban stores only each chat ID, column, and order.
 
-The ↗ action on every card opens that exact chat in the Codex desktop app.
+Codex chats are deliberately read-only here. The app cannot create chats, send messages, answer questions, or approve actions. Its only write is your Kanban placement.
+
+The ↗ action on every card and the link below every conversation preview open that exact chat in the Codex desktop app.
 
 ## Quick start
 
@@ -60,15 +62,15 @@ This is a trusted, single-user desktop tool—not a hosted web application.
 - Every launch creates a private browser session protected by a random token.
 - It does not enable CORS or expose the Codex App Server over the network.
 - Browser events are allowlisted and stripped to the fields the UI needs.
-- Approval is available only when the exact command, file diff, or permission request can be shown. Session-wide writes, malformed requests, oversized details, unknown requests, and connector forms stay decline-only.
+- Outgoing Codex requests are allowlisted to initialization, task listing, and task reading. Unexpected action requests fail closed.
 
-Do **not** expose it with a tunnel, reverse proxy, LAN binding, container port, or public deployment. The local API can read Codex chats, send prompts, and answer narrowly supported approval requests. It intentionally has no remote-user authentication or isolation.
+Do **not** expose it with a tunnel, reverse proxy, LAN binding, container port, or public deployment. The local API can read your Codex chat content and update Kanban placement. It intentionally has no remote-user authentication or isolation.
 
 See [SECURITY.md](SECURITY.md) for the complete boundary.
 
 ## How it works
 
-The Node server starts `codex app-server --stdio` as a child process. It uses the signed-in Codex CLI for task history, messages, streaming, and approvals; it never edits the Codex database directly.
+The Node server starts `codex app-server --stdio` as a child process. It uses the signed-in Codex CLI only to list and read task history and observe status updates. It cannot create or modify Codex work and never edits the Codex database directly.
 
 Card links use the [official Codex deep-link format](https://learn.chatgpt.com/docs/reference/commands#deep-links). A newly created chat may require reopening Codex before the desktop app notices it.
 
@@ -80,7 +82,7 @@ Codex App Server is currently experimental. This release is tested with `codex-c
 npm test
 ```
 
-The optional live check starts an ephemeral Codex chat and uses your signed-in account:
+The optional live check lists your tasks and reads one existing task without creating or changing anything:
 
 ```sh
 npm run test:live

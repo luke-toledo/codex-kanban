@@ -1,7 +1,7 @@
 {
   "name": "codex-kanban",
-  "version": "0.1.0",
-  "description": "A local Kanban board for native Codex chats.",
+  "version": "0.2.0",
+  "description": "A read-only local Kanban board for native Codex chats.",
   "private": true,
   "homepage": "https://github.com/luke-toledo/codex-kanban#readme",
   "bugs": {
@@ -27,7 +27,7 @@
   ],
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test test/approval-policy.test.mjs test/approvals.test.mjs test/board-store.test.mjs test/deep-link.test.mjs test/http-security.test.mjs test/normalize.test.mjs test/public-events.test.mjs test/session-auth.test.mjs",
+    "test": "node --test test/board-store.test.mjs test/deep-link.test.mjs test/http-security.test.mjs test/normalize.test.mjs test/public-events.test.mjs test/read-only-contract.test.mjs test/session-auth.test.mjs",
     "test:live": "node --test --test-name-pattern='live App Server' test/live-smoke.test.mjs"
   },
   "engines": {
