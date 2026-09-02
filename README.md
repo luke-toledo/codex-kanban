@@ -6,6 +6,8 @@ Codex Kanban is a pure, local Kanban view of the tasks already in Codex. Drag th
 
 Built for people who struggle to keep parallel AI work organized. Me included.
 
+**[Try the fake-data demo →](https://codex-kanban-demo.lukesvg.chatgpt.site)**
+
 ![Codex Kanban showing fake chats organized across five columns](docs/codex-kanban-demo.jpg)
 
 _Fake data. Your chaos may vary._
