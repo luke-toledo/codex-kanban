@@ -20,6 +20,10 @@ The persistent board file contains exactly `threadId`, `column`, `order`, and `h
 
 This boundary does not cover the separately installed Codex app/CLI, Node.js, browser, operating system, or GitHub. Codex retains its normal OpenAI network and data behavior. `npx` contacts GitHub and executes the downloaded project source with the user's permissions.
 
+## Public demo
+
+The hosted demo is separate from the local application. It contains only hard-coded fake tasks and messages. It has no Codex connection, API routes, telemetry, database, or persistence; dragging and hiding cards changes only the current page in memory. The demo cannot read local files or Codex data.
+
 ## Built-in controls
 
 - fixed IPv4 loopback binding;

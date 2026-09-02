@@ -23,12 +23,12 @@ It cannot create Codex tasks, send messages, answer questions, approve actions, 
 
 - No accounts.
 - No telemetry.
-- No hosted server.
+- No hosted app or data server.
 - No cloud database.
 - No second chat box.
 - No productivity empire quietly becoming your new full-time job.
 
-One tiny local process runs on your own computer while the board is open. Nothing is hosted by this project.
+One tiny local process runs on your own computer while the real board is open. The public demo is a static fake-data page and cannot access Codex.
 
 ## Quick start
 
