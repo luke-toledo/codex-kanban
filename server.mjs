@@ -64,6 +64,9 @@ const server = createServer(async (request, response) => {
     }
 
     if (!hasValidSession(request.headers.cookie, sessionToken)) {
+      if (request.method === "GET" && url.pathname === "/") {
+        return sessionRequired(response);
+      }
       return json(response, 401, { error: "Restart Codex Kanban to open a private browser session" });
     }
 
@@ -182,6 +185,42 @@ function json(response, status, value) {
     "Cache-Control": "no-store",
   });
   response.end(JSON.stringify(value));
+}
+
+function sessionRequired(response) {
+  response.setHeader(
+    "Content-Security-Policy",
+    "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  );
+  response.writeHead(401, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store",
+  });
+  response.end(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Restart Codex Kanban</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { display: grid; min-width: 320px; min-height: 100vh; margin: 0; place-items: center; padding: 24px; color: #191918; background: #efefeb; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      main { width: min(440px, 100%); padding: 28px; border-radius: 20px; background: #fafaf8; box-shadow: 0 0 0 1px rgb(20 20 18 / 0.08), 0 18px 60px rgb(20 20 18 / 0.12); }
+      .mark { display: grid; width: 42px; height: 42px; margin-bottom: 22px; place-items: center; border-radius: 13px; color: white; background: #1d1d1b; font-weight: 750; }
+      h1 { margin: 0; font-size: 22px; letter-spacing: -0.03em; }
+      p { margin: 10px 0 0; color: #686862; font-size: 14px; line-height: 1.55; }
+      code { display: block; margin-top: 20px; padding: 13px 14px; overflow-x: auto; border-radius: 11px; color: #292926; background: #eeeeea; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; white-space: nowrap; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark" aria-hidden="true">K</div>
+      <h1>Private session expired</h1>
+      <p>Your board is safe. Stop the running command, then start Codex Kanban again. It will open a fresh private link automatically.</p>
+      <code>npx --yes github:luke-toledo/codex-kanban</code>
+    </main>
+  </body>
+</html>`);
 }
 
 async function serveStatic(urlPath, response) {
